@@ -446,7 +446,7 @@ public class CodeMoveTool : EditorWindow
                     var unityPath = asm.ToUnityPath();
                     var noAssetPath = unityPath.Replace("Assets/", "");
                     var topFolderName = noAssetPath.Substring(0, noAssetPath.IndexOf("/"));
-                    var newPathName = folderName + topFolderName + ".asmdef";
+                    var newPathName = folderName + "/"+  topFolderName + ".asmdef";
                     AssetDatabase.RenameAsset(unityPath, topFolderName + ".asmdef");
                     var saveArchive = EasyUseEditorFuns.baseCustomTmpCache + "/" + newPathName.ToUnityPath() + ".path";
                     EasyUseEditorFuns.WriteFileToTargetPath(saveArchive, newPathName.ToUnityPath(), false);

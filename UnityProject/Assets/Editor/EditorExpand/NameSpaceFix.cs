@@ -416,10 +416,9 @@ public class NameSpaceFix
                         if(item.ToLinuxPath().Contains("/Editor/"))
                         {
 
-                            var metaFilePath2 = item + ".path";
-                            var targetUnityAssetPathName = item.ToUnityPath();
-                            // 用额外的txt文件记录该文件的路径 方便回退
-                            EasyUseEditorFuns.WriteFileToTargetPath(metaFilePath2, targetUnityAssetPathName, false);                            
+                            var tar = EasyUseEditorFuns.baseCustomTmpCache + "/" + item.ToUnityPath();
+                            EasyUseEditorFuns.UnitySaveCopyFile(item, tar, true, true, true, false);
+                   
                         }
 
 
