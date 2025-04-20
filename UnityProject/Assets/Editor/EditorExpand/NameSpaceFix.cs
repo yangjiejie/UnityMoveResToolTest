@@ -10,6 +10,7 @@ using System;
 using UnityEditorInternal;
 
 using System.Web;
+using System.Runtime.InteropServices;
 
 
 public class NameSpaceFix 
@@ -239,28 +240,41 @@ public class NameSpaceFix
                         {
                             continue;
                         }
-                        if (!content.Contains(fileNameSpaceList[i].oldNameSpace))
+
+
+                        var oldNameSpaceList = new List<string>();
+                        var newNameSpaceList = new List<string>();
+
+                        bool has = ContainNameSpace(content, fileNameSpaceList[i].oldNameSpace,
+                            fileNameSpaceList[i].newNameSpace, ref oldNameSpaceList,
+                            ref newNameSpaceList);
+                        if (!has)
                         {
                             continue;
                         }
                         fileNameSpaceDealRecord[key].Add(fileNameSpaceList[i].hashKey);
 
-                        var oldNamespace = fileNameSpaceList[i].oldNameSpace;
-                        var newNamespace = fileNameSpaceList[i].newNameSpace;
-                        var oldStaticNameSpaceUse = fileNameSpaceList[i].oldStaticNameSpaceUse;
-                        var newStaticNameSpaceUse = fileNameSpaceList[i].newStaticNameSpaceUse;
+                        for (int j = oldNameSpaceList.Count - 1; j >= 0; --j)
+                        {
+                            var oldNamespace = oldNameSpaceList[j];
+                            var newNamespace = newNameSpaceList[j];
+                            var oldStaticNameSpaceUse = $"{oldNamespace}.{fileNameSpaceList[i].className}";
+                            var newStaticNameSpaceUse = $"{newNamespace}.{fileNameSpaceList[i].className}";
 
+                            // 0. 修复完全限定名替换 （这里不用执行 留给后续流程）
+                            content = Regex.Replace(
+                                content,
+                                @"(?<!\w|\.)"
+                                + Regex.Escape(oldNamespace) +
+                                @"(?=\.\w+)",
+                                newNamespace,
+                                RegexOptions.Multiline);
 
-                        // 0. 修复完全限定名替换 （这里不用执行 留给后续流程）
-                        content = Regex.Replace(
-                            content,
-                            @"(?<!\w|\.)"
-                            + Regex.Escape(oldNamespace) +
-                            @"(?=\.\w+)",
-                            newNamespace,
-                            RegexOptions.Multiline);
+                            fileContent[item] = content;
+                        }
+                        
 
-                        fileContent[item] = content;
+                        
 
                         if (cancel)
                         {
@@ -304,6 +318,51 @@ public class NameSpaceFix
             Log(("修复完毕"));
         }
     }
+
+    bool ContainNameSpace(string content, string nameSpaceOldStr, string nameSpaceNewStr, ref List<string> nameSpaceOldlist , ref List<string> nameSpaceNewList)
+    {
+        bool result = false;
+       
+        if (content.Contains(nameSpaceOldStr))
+        {
+            
+            nameSpaceOldlist.Add(nameSpaceOldStr);
+            nameSpaceNewList.Add(nameSpaceNewStr);
+            
+            result = true;
+        }
+        var sbOld = new StringBuilder();
+        var spOldArr = nameSpaceOldStr.Split(".");
+        var spNewArr = nameSpaceNewStr.Split(".");
+        if(spOldArr.Length <= 1)
+        {
+            return result;
+        }
+        var nCount = spOldArr.Length - 1;
+        while(nCount > 0)
+        {
+            sbOld.Clear();
+            for (int i = 0; i < nCount; ++i)
+            {
+                sbOld.Append(spOldArr[i]);
+                sbOld.Append(i != nCount - 1 ? "." : "");
+            }
+            if (content.Contains(sbOld.ToString()))
+            {
+                result = true;
+                nameSpaceOldlist.Add(sbOld.ToString());
+                var sbNew = new StringBuilder();
+                for(int j = 0; j < nCount -1;j ++)
+                {
+                    sbNew.Append(spNewArr[j]);
+                }
+                nameSpaceNewList.Add(sbNew.ToString());
+            }
+            --nCount;
+        }
+        
+        return result;
+    }
     void FixUsingNameSpace()
     {
         try
@@ -342,41 +401,64 @@ public class NameSpaceFix
                         {
                             continue;
                         }
-                        if (!content.Contains(fileNameSpaceList[i].oldNameSpace))
+
+
+                        var oldNameSpaceList = new List<string>();
+                        var newNameSpaceList = new List<string>();
+
+                        bool  has = ContainNameSpace(content, fileNameSpaceList[i].oldNameSpace,
+                            fileNameSpaceList[i].newNameSpace, ref oldNameSpaceList,
+                            ref newNameSpaceList);
+                        if(!has )
                         {
                             continue;
                         }
-                        fileNameSpaceDealRecord[key].Add(fileNameSpaceList[i].hashKey);
-
-                        var oldNamespace = fileNameSpaceList[i].oldNameSpace;
-                        var newNamespace = fileNameSpaceList[i].newNameSpace;
-                        var oldStaticNameSpaceUse = fileNameSpaceList[i].oldStaticNameSpaceUse;
-                        var newStaticNameSpaceUse = fileNameSpaceList[i].newStaticNameSpaceUse;
-
-                        content = Regex.Replace(
-                            content,
-                            @"(^|\s)namespace\s+" + Regex.Escape(oldNamespace) + @"(?=\s*[;{])",
-                            "namespace " + newNamespace,
-                            RegexOptions.Multiline);
-
-
-                        // 2. 修复using语句替换
-                        var matches = Regex.Matches(content, @"(^|\s)(using\s+" + Regex.Escape(oldNamespace) + @"\s*;)");
-
-                        foreach (Match match in matches.Reverse())
+                        if(item.ToLinuxPath().Contains("/Editor/"))
                         {
-                            // 检查该文件是否使用了原命名空间下的类型
-                            bool isOriginalNamespaceUsed = false;
-                            // 根据使用情况决定替换方式
-                            content = isOriginalNamespaceUsed
-                                ? content.Insert(match.Index + match.Length,
-                                    $"\nusing {newNamespace};")
-                                : content.Replace(match.Value,
-                                    $"using {newNamespace};");
+
+                            var metaFilePath2 = item + ".path";
+                            var targetUnityAssetPathName = item.ToUnityPath();
+                            // 用额外的txt文件记录该文件的路径 方便回退
+                            EasyUseEditorFuns.WriteFileToTargetPath(metaFilePath2, targetUnityAssetPathName, false);                            
                         }
 
 
-                        fileContent[item] = content;
+                        fileNameSpaceDealRecord[key].Add(fileNameSpaceList[i].hashKey);
+
+                        for(int j = oldNameSpaceList.Count - 1; j >= 0 ; --j)
+                        {
+                            var oldNamespace = oldNameSpaceList[j];
+                            var newNamespace = newNameSpaceList[j];
+                            var oldStaticNameSpaceUse = $"{oldNamespace}.{fileNameSpaceList[i].className}";
+                            var newStaticNameSpaceUse = $"{newNamespace}.{fileNameSpaceList[i].className}";
+
+                            content = Regex.Replace(
+                                content,
+                                @"(^|\s)namespace\s+" + Regex.Escape(oldNamespace) + @"(?=\s*[;{])",
+                                "namespace " + newNamespace,
+                                RegexOptions.Multiline);
+
+
+                            // 2. 修复using语句替换
+                            var matches = Regex.Matches(content, @"(^|\s)(using\s+" + Regex.Escape(oldNamespace) + @"\s*;)");
+
+                            foreach (Match match in matches.Reverse())
+                            {
+                                // 检查该文件是否使用了原命名空间下的类型
+                                bool isOriginalNamespaceUsed = false;
+                                // 根据使用情况决定替换方式
+                                content = isOriginalNamespaceUsed
+                                    ? content.Insert(match.Index + match.Length,
+                                        $"\nusing {newNamespace};")
+                                    : content.Replace(match.Value,
+                                        $"using {newNamespace};");
+                            }
+
+
+                            fileContent[item] = content;
+                        }
+
+                        
 
                         if (cancel)
                         {
@@ -465,6 +547,7 @@ public class NameSpaceFix
     {
         public string oldNameSpace;
         public string oldStaticNameSpaceUse;
+        public string className;
         public string newStaticNameSpaceUse;
         public string newNameSpace;
         public int hashKey;
@@ -529,6 +612,8 @@ public class NameSpaceFix
             fileNameSpaceList.Add(node);
             node.oldNameSpace = oldNamespace;
             node.oldStaticNameSpaceUse = $"{oldNamespace}.{className}";
+            node.className = className;
+            
             
             node.newNameSpace = newNamespace;
             node.newStaticNameSpaceUse = $"{newNamespace}.{className}";
